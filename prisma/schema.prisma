@@ -14,37 +14,68 @@ enum AccountStatus {
   ERROR
 }
 
+model AdminUser {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  passwordHash String         @db.Text
+  isActive     Boolean        @default(true)
+  lastLoginAt  DateTime?
+  sessions     AdminSession[]
+  activityLogs ActivityLog[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model AdminSession {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique @db.VarChar(64)
+  adminId   String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  admin AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([expiresAt])
+}
+
 model ZoomAccount {
-  id             String        @id @default(cuid())
-  slotNumber     Int           @unique
-  displayName    String
-  zoomUserId     String?       @unique
-  email          String?
-  status         AccountStatus @default(NOT_CONNECTED)
-  accessTokenEnc String?       @db.Text
-  refreshTokenEnc String?     @db.Text
-  tokenExpiresAt DateTime?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id              String        @id @default(cuid())
+  slotNumber      Int           @unique
+  displayName     String
+  zoomUserId      String?       @unique
+  email           String?
+  status          AccountStatus @default(NOT_CONNECTED)
+  accessTokenEnc  String?       @db.Text
+  refreshTokenEnc String?       @db.Text
+  tokenExpiresAt  DateTime?
+  activityLogs    ActivityLog[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   @@index([status])
 }
 
 model MeetingConfiguration {
-  id                String   @id @default("primary")
-  meetingLink       String?
-  meetingId         String?
-  meetingPasswordEnc String? @db.Text
-  updatedAt         DateTime @updatedAt
+  id                 String   @id @default("primary")
+  meetingLink        String?
+  meetingId          String?
+  meetingPasswordEnc String?  @db.Text
+  updatedAt          DateTime @updatedAt
 }
 
 model ActivityLog {
   id          String   @id @default(cuid())
   action      String
+  adminId     String?
   accountId   String?
   description String?
   createdAt   DateTime @default(now())
 
+  admin   AdminUser?   @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  account ZoomAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
   @@index([createdAt])
   @@index([accountId])
+  @@index([adminId])
 }

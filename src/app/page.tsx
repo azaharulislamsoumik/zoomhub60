@@ -1,5 +1,15 @@
+import { redirect } from "next/navigation";
 import Dashboard from "@/components/dashboard";
+import { getCurrentAdmin } from "@/lib/auth";
 
-export default function Home() {
+export const runtime = "nodejs";
+
+export default async function Home() {
+  const admin = await getCurrentAdmin();
+
+  if (!admin) {
+    redirect("/login");
+  }
+
   return <Dashboard />;
 }
