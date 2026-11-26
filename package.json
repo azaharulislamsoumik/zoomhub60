@@ -28,5 +28,16 @@
     "postcss": "^8.5.33",
     "prisma": "6.19.0",
     "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "@prisma/config": {
+      "deepmerge-ts": "^8.0.2",
+      "effect": "^3.22.1"
+    }
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.0": true,
+    "@prisma/engines@6.19.0": true,
+    "prisma@6.19.0": true
   }
 }
