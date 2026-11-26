@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountStatus {
+  NOT_CONNECTED
+  CONNECTED
+  TOKEN_EXPIRED
+  ERROR
+}
+
+model ZoomAccount {
+  id             String        @id @default(cuid())
+  slotNumber     Int           @unique
+  displayName    String
+  zoomUserId     String?       @unique
+  email          String?
+  status         AccountStatus @default(NOT_CONNECTED)
+  accessTokenEnc String?       @db.Text
+  refreshTokenEnc String?     @db.Text
+  tokenExpiresAt DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([status])
+}
+
+model MeetingConfiguration {
+  id                String   @id @default("primary")
+  meetingLink       String?
+  meetingId         String?
+  meetingPasswordEnc String? @db.Text
+  updatedAt         DateTime @updatedAt
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  action      String
+  accountId   String?
+  description String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([accountId])
+}
