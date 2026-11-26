@@ -21,6 +21,7 @@ model AdminUser {
   isActive     Boolean        @default(true)
   lastLoginAt  DateTime?
   sessions     AdminSession[]
+  oauthStates  OAuthState[]
   activityLogs ActivityLog[]
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
@@ -52,6 +53,7 @@ model ZoomAccount {
   activityLogs    ActivityLog[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+  oauthStates     OAuthState[]
 
   @@index([status])
 }
@@ -78,4 +80,19 @@ model ActivityLog {
   @@index([createdAt])
   @@index([accountId])
   @@index([adminId])
+}
+
+model OAuthState {
+  id        String   @id @default(cuid())
+  stateHash String   @unique @db.VarChar(64)
+  adminId   String
+  accountId String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  admin   AdminUser   @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  account ZoomAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([accountId])
 }

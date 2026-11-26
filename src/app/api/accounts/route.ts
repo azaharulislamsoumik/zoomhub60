@@ -1,16 +1,31 @@
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentAdmin } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+async function isAuthorizedAdmin() {
+  const admin = await getCurrentAdmin();
+  return Boolean(admin && admin.isActive);
+}
+
+function hasValidOrigin(request: NextRequest) {
+  const origin = request.headers.get("origin");
+
+  if (!origin) return false;
+
+  try {
+    return new URL(origin).origin === request.nextUrl.origin;
+  } catch {
+    return false;
+  }
+}
+
 export async function GET() {
   try {
-    const admin = await getCurrentAdmin();
-
-    if (!admin || !admin.isActive) {
+    if (!(await isAuthorizedAdmin())) {
       return NextResponse.json(
         { error: "Unauthorized access." },
         { status: 401 }
@@ -52,31 +67,27 @@ export async function GET() {
   }
 }
 
-export async function PATCH(request: Request) {
+export async function PATCH(request: NextRequest) {
   try {
-    const admin = await getCurrentAdmin();
-
-    if (!admin || !admin.isActive) {
-      return NextResponse.json(
-        { error: "Unauthorized access." },
-        { status: 401 }
-      );
-    }
-
-    const origin = request.headers.get("origin");
-    const host = request.headers.get("host");
-
-    if (origin && host && new URL(origin).host !== host) {
+    if (!hasValidOrigin(request)) {
       return NextResponse.json(
         { error: "Invalid request origin." },
         { status: 403 }
       );
     }
 
-    const body = await request.json();
-    const id = typeof body.id === "string" ? body.id : "";
+    if (!(await isAuthorizedAdmin())) {
+      return NextResponse.json(
+        { error: "Unauthorized access." },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json().catch(() => null);
+
+    const id = typeof body?.id === "string" ? body.id : "";
     const displayName =
-      typeof body.displayName === "string"
+      typeof body?.displayName === "string"
         ? body.displayName.trim()
         : "";
 

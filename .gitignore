@@ -8,3 +8,5 @@ out/
 .DS_Store
 *.bak
 *.tsbuildinfo
+# Local Netlify folder
+.netlify

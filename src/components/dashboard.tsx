@@ -65,7 +65,39 @@ export default function Dashboard() {
   const [summary, setSummary] = useState<Summary>(emptySummary);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState("");
+const [connectingId, setConnectingId] = useState<string | null>(null);
+const [connectError, setConnectError] = useState("");
 
+async function connectZoomAccount(accountId: string) {
+  try {
+    setConnectingId(accountId);
+    setConnectError("");
+
+    const response = await fetch("/api/zoom/connect", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify({ accountId }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.authorizationUrl) {
+      throw new Error(data.error || "Unable to connect Zoom account.");
+    }
+
+    window.location.assign(data.authorizationUrl);
+  } catch (error) {
+    setConnectError(
+      error instanceof Error
+        ? error.message
+        : "Unable to connect Zoom account."
+    );
+    setConnectingId(null);
+  }
+}
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All accounts");
 
@@ -75,11 +107,41 @@ export default function Dashboard() {
   const [saved, setSaved] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  const [meetingConfigLoading, setMeetingConfigLoading] = useState(true);
+  const [meetingSaving, setMeetingSaving] = useState(false);
+  const [meetingError, setMeetingError] = useState("");
+  const [meetingSuccess, setMeetingSuccess] = useState("");
+  const [hasMeetingPassword, setHasMeetingPassword] = useState(false);
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [renaming, setRenaming] = useState(false);
   const [renameError, setRenameError] = useState("");
   const [renameSuccess, setRenameSuccess] = useState("");
+  const [connectSuccess, setConnectSuccess] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const zoomStatus = params.get("zoom");
+
+    const messages: Record<string, string> = {
+      connected: "Zoom account connected successfully.",
+      authorization_denied: "Zoom authorization was cancelled or denied.",
+      invalid_state: "Zoom authorization expired or was invalid. Please try again.",
+      unauthorized: "Your admin session is invalid. Please log in again.",
+      connection_failed: "Unable to connect Zoom account. Please try again.",
+    };
+
+    if (zoomStatus && messages[zoomStatus]) {
+      if (zoomStatus === "connected") {
+        setConnectSuccess(messages[zoomStatus]);
+      } else {
+        setConnectError(messages[zoomStatus]);
+      }
+
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -132,6 +194,100 @@ export default function Dashboard() {
 
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadMeetingConfig() {
+      try {
+        setMeetingConfigLoading(true);
+        setMeetingError("");
+
+        const response = await fetch("/api/meeting-config", {
+          method: "GET",
+          cache: "no-store",
+          credentials: "same-origin",
+          signal: controller.signal,
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.error || "Unable to load meeting configuration."
+          );
+        }
+
+        setMeetingLink(data.config?.meetingLink || "");
+        setMeetingId(data.config?.meetingId || "");
+        setHasMeetingPassword(
+          Boolean(data.config?.hasMeetingPassword)
+        );
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
+
+        setMeetingError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load meeting configuration."
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setMeetingConfigLoading(false);
+        }
+      }
+    }
+
+    loadMeetingConfig();
+
+    return () => controller.abort();
+  }, []);
+
+  async function saveMeetingConfig() {
+    try {
+      setMeetingSaving(true);
+      setMeetingError("");
+      setMeetingSuccess("");
+
+      const response = await fetch("/api/meeting-config", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          meetingLink,
+          meetingId,
+          meetingPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || "Unable to save meeting configuration."
+        );
+      }
+
+      setHasMeetingPassword(
+        Boolean(data.config?.hasMeetingPassword)
+      );
+      setShowPassword(false);
+      setSaved(true);
+      setMeetingSuccess("Meeting configuration saved securely.");
+    } catch (error) {
+      setMeetingError(
+        error instanceof Error
+          ? error.message
+          : "Unable to save meeting configuration."
+      );
+    } finally {
+      setMeetingSaving(false);
+    }
+  }
 
   function startRename(account: Account) {
     setEditingId(account.id);
@@ -249,17 +405,9 @@ export default function Dashboard() {
         </a>
 
         <a className="nav-item">
-          <Users size={17} /> Account Profiles
-          <span className="nav-count">{summary.total}</span>
-        </a>
-
-        <a className="nav-item">
           <Video size={17} /> Meeting Settings
         </a>
 
-        <a className="nav-item">
-          <Clock3 size={17} /> Activity Logs
-        </a>
 
         <div className="nav-label space-top">PREFERENCES</div>
 
@@ -452,22 +600,35 @@ export default function Dashboard() {
             <div className="panel-footer">
               <span className="muted-note">
                 <LockKeyhole size={14} />
-                Production version will encrypt the password at rest.
+                Password is encrypted before database storage.
+                {hasMeetingPassword ? " A password is already saved." : ""}
               </span>
 
               <button
                 className="secondary-btn"
-                onClick={() => setSaved(true)}
+                onClick={saveMeetingConfig}
+                disabled={meetingSaving || meetingConfigLoading}
               >
                 <Check size={15} />
-                {saved ? "Saved in this demo" : "Save configuration"}
+                {meetingSaving
+                  ? "Saving..."
+                  : saved
+                    ? "Saved securely"
+                    : "Save configuration"}
               </button>
             </div>
 
-            <div className="demo-warning">
-              Prototype only: this form currently stores values in page state,
-              not in a database. Do not enter a real meeting password yet.
-            </div>
+            {meetingConfigLoading && (
+              <p className="muted-note">Loading saved meeting configuration...</p>
+            )}
+
+            {meetingError && (
+              <p role="alert" className="error-message">{meetingError}</p>
+            )}
+
+            {meetingSuccess && (
+              <p role="status" className="success-message">{meetingSuccess}</p>
+            )}
           </section>
 
           <section className="panel accounts-panel">
@@ -525,6 +686,11 @@ export default function Dashboard() {
             {renameSuccess && (
               <div className="rename-success" role="status">
                 {renameSuccess}
+              </div>
+            )}
+            {connectSuccess && (
+              <div className="rename-success" role="status">
+                {connectSuccess}
               </div>
             )}
 
@@ -632,13 +798,23 @@ export default function Dashboard() {
                         </b>
                       </div>
 
-                      <button
-                        className="connect-btn"
-                        disabled
-                        title="Zoom OAuth connection will be implemented in the next phase"
-                      >
-                        Connect Zoom account <ArrowUpRight size={14} />
-                      </button>
+                   <button
+  className="connect-btn"
+  onClick={() => connectZoomAccount(account.id)}
+  disabled={connectingId !== null}
+>
+  {connectingId === account.id
+    ? "Connecting..."
+    : account.status === "CONNECTED"
+      ? "Reconnect Zoom account"
+      : "Connect Zoom account"}
+  <ArrowUpRight size={14} />
+</button>
+{connectError && (
+  <p className="rename-error" role="alert">
+    {connectError}
+  </p>
+)}
                     </article>
                   ))}
                 </div>
